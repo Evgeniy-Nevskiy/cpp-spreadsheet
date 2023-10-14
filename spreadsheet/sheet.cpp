@@ -12,99 +12,122 @@ using namespace std::literals;
 
 Sheet::~Sheet() {}
 
-void Sheet::SetCell(Position pos, std::string text) {
-    if (!pos.IsValid()) throw InvalidPositionException("Invalid position");
-    
-    cells_[pos].Set(text);
+void Sheet::SetCell(Position pos, std::string text)
+{
+    if (!pos.IsValid())
+        throw InvalidPositionException("Invalid position");
+
+    const auto &cell = cells_.find(pos);
+
+    if (cell == cells_.end())
+        cells_.emplace(pos, std::make_unique<Cell>(*this));
+    cells_.at(pos)->Set(std::move(text));
 }
 
-const CellInterface* Sheet::GetCell(Position pos) const {
-    if (!pos.IsValid()) throw InvalidPositionException("Invalid position");
-    
-    auto it = cells_.find(pos);
-    if (it == cells_.end()) return nullptr;
-
-    const Cell* cell = &cells_.at(pos);
-    if (cell->GetText().size() == 0) return nullptr;
-
-    return cell;
+const CellInterface *Sheet::GetCell(Position pos) const
+{
+    return GetCellPtr(pos);
 }
 
-CellInterface* Sheet::GetCell(Position pos) {
-    if (!pos.IsValid()) throw InvalidPositionException("Invalid position");
-
-    auto it = cells_.find(pos);
-    if (it == cells_.end()) return nullptr;
-
-    Cell* cell = &cells_.at(pos);
-    if (cell->GetText().size() == 0) return nullptr;
-
-    return cell;
+CellInterface *Sheet::GetCell(Position pos)
+{
+    return GetCellPtr(pos);
 }
 
-void Sheet::ClearCell(Position pos) {
-    if (!pos.IsValid()) throw InvalidPositionException("Invalid position");
+void Sheet::ClearCell(Position pos)
+{
+    if (!pos.IsValid())
+        throw InvalidPositionException("Invalid position");
 
-    cells_[pos].Clear();
-}
-
-Size Sheet::GetPrintableSize() const {
-    Size result{ 0, 0 };
-    
-    if (cells_.begin() == cells_.end()) return result;
-    for (auto it = cells_.begin(); it != cells_.end(); ++it) {
-        if (it->second.GetText().size() == 0) continue;
-        const int col = it->first.col;
-        const int row = it->first.row;
-
-        if (result.cols <= col) {
-            result.cols = col + 1;
-        }
-        if (result.rows <= row) {
-            result.rows = row + 1;
+    const auto &cell = cells_.find(pos);
+    if (cell != cells_.end() && cell->second != nullptr)
+    {
+        cell->second->Clear();
+        if (!cell->second->IsReferenced())
+        {
+            cell->second.reset();
         }
     }
-    return { result.rows, result.cols };
 }
 
-void Sheet::PrintValues(std::ostream& output) const {
+Size Sheet::GetPrintableSize() const
+{
+    Size result{0, 0};
+
+    for (auto it = cells_.begin(); it != cells_.end(); ++it)
+    {
+        if (it->second != nullptr)
+        {
+            const int col = it->first.col;
+            const int row = it->first.row;
+            result.rows = std::max(result.rows, row + 1);
+            result.cols = std::max(result.cols, col + 1);
+        }
+    }
+
+    return {result.rows, result.cols};
+}
+
+void Sheet::PrintValues(std::ostream &output) const
+{
     Size size = GetPrintableSize();
-    for (int row = 0; row < size.rows; ++row) {
-        bool first = true;
-        for (int col = 0; col < size.cols; ++col) {
-            if (!first) {
+    for (int row = 0; row < size.rows; ++row)
+    {
+        for (int col = 0; col < size.cols; ++col)
+        {
+            if (col > 0)
                 output << "\t";
-            }
-            first = false;
-            Position pos = { row, col };
-            auto it = cells_.find(pos);
-            if (it != cells_.end()) {
-                auto value = cells_.at(pos).GetValue();
-                std::visit([&output](auto&& arg) {output << arg; }, value);
+            const auto &it = cells_.find({row, col});
+            if (it != cells_.end() && it->second != nullptr && !it->second->GetText().empty())
+            {
+                std::visit([&](const auto value)
+                           { output << value; },
+                           it->second->GetValue());
             }
         }
         output << "\n";
     }
 }
-void Sheet::PrintTexts(std::ostream& output) const {
+void Sheet::PrintTexts(std::ostream &output) const
+{
     Size size = GetPrintableSize();
-    for (int row = 0; row < size.rows; ++row) {
-        bool first = true;
-        for (int col = 0; col < size.cols; ++col) {
-            if (!first) {
+    for (int row = 0; row < size.rows; ++row)
+    {
+        for (int col = 0; col < size.cols; ++col)
+        {
+            if (col > 0)
                 output << "\t";
-            }
-            first = false;
-            Position pos = { row, col };
-            auto it = cells_.find(pos);
-            if (it != cells_.end()) {
-                output << cells_.at(pos).GetText();
+            const auto &it = cells_.find({row, col});
+            if (it != cells_.end() && it->second != nullptr && !it->second->GetText().empty())
+            {
+                output << it->second->GetText();
             }
         }
         output << "\n";
     }
 }
 
-std::unique_ptr<SheetInterface> CreateSheet() {
+const Cell *Sheet::GetCellPtr(Position pos) const
+{
+    if (!pos.IsValid())
+        throw InvalidPositionException("Invalid position");
+
+    const auto cell = cells_.find(pos);
+    if (cell == cells_.end())
+    {
+        return nullptr;
+    }
+
+    return cells_.at(pos).get();
+}
+
+Cell *Sheet::GetCellPtr(Position pos)
+{
+    return const_cast<Cell *>(
+        static_cast<const Sheet &>(*this).GetCellPtr(pos));
+}
+
+std::unique_ptr<SheetInterface> CreateSheet()
+{
     return std::make_unique<Sheet>();
 }

@@ -5,13 +5,13 @@
 
 #include <functional>
 #include <unordered_set>
-#include <optional>
 
 class Sheet;
 
-class Cell : public CellInterface {
+class Cell : public CellInterface
+{
 public:
-    Cell(Sheet& sheet);
+    Cell(Sheet &sheet);
     ~Cell();
 
     void Set(std::string text);
@@ -21,17 +21,19 @@ public:
     std::string GetText() const override;
     std::vector<Position> GetReferencedCells() const override;
 
+    bool IsReferenced() const;
+
 private:
     class Impl;
     class EmptyImpl;
     class TextImpl;
     class FormulaImpl;
-    bool WouldIntroduceCircularDependency(const Impl& impl) const;
+    bool WouldIntroduceCircularDependency(const Impl &new_impl) const;
     void InvalidateCacheRecursive(bool force = false);
-    
-private:
+
     std::unique_ptr<Impl> impl_;
-    Sheet& sheet_;
-    std::unordered_set<Cell*> l_nodes_;
-    std::unordered_set<Cell*> r_nodes_;
+
+    Sheet &sheet_;
+    std::unordered_set<Cell *> l_nodes_;
+    std::unordered_set<Cell *> r_nodes_;
 };
